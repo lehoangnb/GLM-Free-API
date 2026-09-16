@@ -4,9 +4,11 @@ set -e
 
 DB="/app/data/tokens.sqlite"
 
-TOKEN_COUNT=${TOKEN_COUNT_PER_BATCH:-850}
-TOKEN_BATCHES=${TOKEN_BATCHES:-5}
-TOKEN_PARALLEL=${TOKEN_PARALLEL:-2}
+TOKEN_COUNT="${TOKEN_COUNT_PER_BATCH:-850}"
+TOKEN_BATCHES="${TOKEN_BATCHES:-5}"
+TOKEN_PARALLEL="${TOKEN_PARALLEL:-2}"
+
+mkdir -p /app/data
 
 if [ ! -f "$DB" ]; then
     echo "=============================================="
@@ -22,6 +24,11 @@ if [ ! -f "$DB" ]; then
         --batch "$TOKEN_BATCHES" \
         --parallel "$TOKEN_PARALLEL" \
         --no-tui
+
+    # collector creates database in current working directory
+    if [ -f "/app/tokens.sqlite" ] && [ ! -f "$DB" ]; then
+        mv /app/tokens.sqlite "$DB"
+    fi
 
     if [ ! -f "$DB" ]; then
         echo "ERROR: token collector did not create $DB"
