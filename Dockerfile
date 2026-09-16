@@ -1,23 +1,31 @@
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-bookworm AS builder
 
-WORKDIR /app
+WORKDIR /build
+
 COPY . .
 
-RUN go mod init zai-api \
-    && go mod tidy \
-    && go build -trimpath -gcflags="all=-l=4" -ldflags="-s -w" -o glm-free-api .
+RUN if [ ! -f go.mod ]; then \
+        go mod init github.com/lehoangnb/GLM-Free-API; \
+    fi \
+    && go mod tidy
 
-FROM alpine:3.22
+RUN CGO_ENABLED=0 \
+    go build \
+    -trimpath \
+    -gcflags="all=-l=4" \
+    -ldflags="-s -w" \
+    -o glm-free-api .
+
+FROM debian:bookworm-slim
 
 WORKDIR /app
 
-COPY --from=builder /app/glm-free-api /app/glm-free-api
+COPY --from=builder /build/glm-free-api /app/glm-free-api
 
 RUN mkdir -p /app/data
 
 ENV HOST=0.0.0.0
 ENV PORT=3001
-ENV AUTH_TOKEN=Waguri
 
 EXPOSE 3001
 
