@@ -5,7 +5,7 @@ WORKDIR /build
 COPY . .
 
 RUN if [ ! -f go.mod ]; then \
-        go mod init github.com/lehoangnb/GLM-Free-API; \
+        go mod init zai-api; \
     fi \
     && go mod tidy
 
