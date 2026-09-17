@@ -64,18 +64,36 @@ func Run() {
     flag.BoolVar(&config.SyncMode, "sync-mode", config.SyncMode, "Legacy synchronous session flow: create a fresh chat per request instead of drawing from the pre-warmed session pool (used sessions are still deleted on Z.AI after each response)")
     flag.Parse()
 
+    // ZAI_TOKEN mode does not need the captcha DB: an authenticated JWT
+    // bypasses the Aliyun captcha, so a missing/unreadable tokens.sqlite
+    // must not prevent startup. Guest mode still requires it.
+    dbAvailable := true
     if _, err := os.Stat(dbPath); err != nil {
-        log.Println("Captcha db not found! Please run the token collector first (cmd/token-collector)")
-        os.Exit(1)
+        if config.ZaiToken != "" {
+            log.Println("[Startup] Captcha db not found, but ZAI_TOKEN is set — running in authenticated mode without captcha DB")
+            dbAvailable = false
+        } else {
+            log.Println("Captcha db not found! Please run the token collector first (cmd/token-collector)")
+            os.Exit(1)
+        }
     }
 
-    logInfo("Starting with db-path='" + dbPath + "' verbose=true")
+    if dbAvailable {
+        logInfo("Starting with db-path='" + dbPath + "' verbose=true")
 
-    if err := initDB(); err != nil {
-        fmt.Fprintf(os.Stderr, "Failed to open database: %v\n", err)
-        os.Exit(1)
+        if err := initDB(); err != nil {
+            if config.ZaiToken != "" {
+                log.Printf("[Startup] Warning: failed to open captcha db (%v) — continuing in authenticated mode without captcha", err)
+            } else {
+                fmt.Fprintf(os.Stderr, "Failed to open database: %v\n", err)
+                os.Exit(1)
+            }
+        } else {
+            defer closeDB()
+        }
+    } else {
+        logInfo("Starting without captcha db (ZAI_TOKEN authenticated mode)")
     }
-    defer closeDB()
 
     gRunning.Store(true)
 

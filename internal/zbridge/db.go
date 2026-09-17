@@ -456,6 +456,17 @@ func initDB() error {
     return nil
 }
 
+// hasCaptchaDB reports whether a captcha token database is currently
+// attached. ZAI_TOKEN (authenticated) mode uses it to decide whether a
+// captcha can even be attempted — with no DB there is nothing to burn,
+// so the request proceeds without captcha_verify_param instead of failing.
+func hasCaptchaDB() bool {
+    s := globalDBState
+    s.mu.RLock()
+    defer s.mu.RUnlock()
+    return s.active.db != nil
+}
+
 // closeDB closes the active database if one is attached (shutdown path).
 // Drains in-flight queries first so a graceful shutdown also retires the
 // handle politely.

@@ -574,6 +574,14 @@ func (c *CaptchaCache) Run() {
 }
 
 func (c *CaptchaCache) generate() {
+    // ZAI_TOKEN mode without a captcha DB has nothing to burn — skip the
+    // upstream round-trip instead of failing in a hot loop.
+    if config.ZaiToken != "" && !hasCaptchaDB() {
+        c.mu.Lock()
+        c.generating--
+        c.mu.Unlock()
+        return
+    }
     startedAt := time.Now()
     payload := computeFinalPayload()
     
@@ -606,12 +614,22 @@ func getCaptchaVerifyParam() (string, error) {
     if captchaParamOverride != "" {
         return captchaParamOverride, nil
     }
+    // Authenticated (ZAI_TOKEN) requests carry a logged-in JWT and do not
+    // need the Aliyun captcha. When no captcha DB is attached there is
+    // nothing to burn — skip instead of failing. The agent-mode cache is
+    // still honoured first so seeded/test params keep working.
+    zaiAuth := config.ZaiToken != ""
     if config.AgentMode {
         if val, ok := captchaCache.Get(); ok {
             logInfo("[Captcha Cache] hit - using cached param")
             return val, nil
         }
+        if zaiAuth && !hasCaptchaDB() {
+            return "", nil
+        }
         logInfo("[Captcha Cache] miss - generating synchronously")
+    } else if zaiAuth && !hasCaptchaDB() {
+        return "", nil
     }
 
     startedAt := time.Now()
@@ -637,10 +655,20 @@ func getCaptchaVerifyParam() (string, error) {
         elapsed := time.Since(startedAt).Seconds()
         if r.err != nil {
             log.Printf("[Captcha] ✗ error: %s", r.err.Error())
+            // Best-effort in authenticated mode: a dead/empty DB must not
+            // fail the request — proceed without captcha_verify_param.
+            if zaiAuth {
+                log.Printf("[Captcha] ZAI_TOKEN mode — proceeding without captcha_verify_param")
+                return "", nil
+            }
             return "", r.err
         }
         if r.val == "" {
             log.Printf("[Captcha] ✗ empty response after %.1fs", elapsed)
+            if zaiAuth {
+                log.Printf("[Captcha] ZAI_TOKEN mode — proceeding without captcha_verify_param")
+                return "", nil
+            }
             return "", errors.New("captcha generation returned empty response")
         }
         log.Printf("[Captcha] ✓ got %db in %.1fs", len(r.val), elapsed)
@@ -648,6 +676,10 @@ func getCaptchaVerifyParam() (string, error) {
     case <-time.After(90 * time.Second):
         elapsed := time.Since(startedAt).Seconds()
         log.Printf("[Captcha] ✗ timeout after %.1fs", elapsed)
+        if zaiAuth {
+            log.Printf("[Captcha] ZAI_TOKEN mode — proceeding without captcha_verify_param")
+            return "", nil
+        }
         return "", errors.New("captcha generation timeout after 90s")
     }
 }

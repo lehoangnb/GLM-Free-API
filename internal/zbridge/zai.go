@@ -486,13 +486,20 @@ func sendToZAIStream(prompt string, opts struct {
         featuresPayload["web_search"] = false
 
         requestBody := map[string]interface{}{
-            "model":                opts.Model,
-            "chat_id":              opts.ChatID,
-            "messages":             messagesField,
-            "signature_prompt":     prompt,
-            "stream":               true,
-            "captcha_verify_param": captchaParam,
-            "features":             featuresPayload,
+            "model":            opts.Model,
+            "chat_id":          opts.ChatID,
+            "messages":         messagesField,
+            "signature_prompt": prompt,
+            "stream":           true,
+            "features":         featuresPayload,
+        }
+        // Guest sessions must always carry a captcha_verify_param (it costs
+        // a harvested device token). Authenticated (ZAI_TOKEN) requests
+        // bypass the captcha: when getCaptchaVerifyParam returns "" (no DB
+        // attached or generation failed) the field is omitted entirely so
+        // the request still succeeds instead of failing locally.
+        if captchaParam != "" {
+            requestBody["captcha_verify_param"] = captchaParam
         }
         // Attach uploaded files (images) only when present — text-only
         // requests keep the exact body shape they always had.
