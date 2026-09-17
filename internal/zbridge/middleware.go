@@ -3,6 +3,7 @@ package zbridge
 import (
     "encoding/json"
     "net/http"
+    "os"
     "strings"
 )
 
@@ -17,13 +18,11 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
     json.NewEncoder(w).Encode(v)
 }
 
-// ============================================================================
-// MIDDLEWARE
-// ============================================================================
-
 func corsMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("Access-Control-Allow-Origin", "*")
+        if origin := os.Getenv("CORS_ORIGIN"); origin != "" {
+            w.Header().Set("Access-Control-Allow-Origin", origin)
+        }
         w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Include-All-Features, x-api-key, anthropic-version")
         if r.Method == "OPTIONS" {
@@ -43,7 +42,6 @@ func checkAuth(r *http.Request) bool {
     if len(authHeader) >= 7 && strings.EqualFold(authHeader[:7], "Bearer ") {
         provided = authHeader[7:]
     }
-    // Anthropic clients send the API key via x-api-key header
     if provided == "" {
         provided = r.Header.Get("x-api-key")
     }
@@ -62,7 +60,7 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
             json.NewEncoder(w).Encode(map[string]interface{}{
                 "type": "error",
                 "error": map[string]interface{}{
-                    "type":    "authentication_error",
+                    "type": "authentication_error",
                     "message": "Invalid or missing authentication token",
                 },
             })
@@ -71,10 +69,6 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
         next(w, r)
     }
 }
-
-// ============================================================================
-// HTTP HANDLERS
-// ============================================================================
 
 func dashboardHandler(w http.ResponseWriter, r *http.Request) {
     if r.URL.Path != "/" {
@@ -98,14 +92,13 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     writeJSON(w, 200, map[string]interface{}{
-        "connected":   session.Initialized,
-        "userName":    session.UserName,
-        "userId":      userIDPreview,
-        "feVersion":   session.FeVersion,
-        "features":    session.Features,
-        "mode":        "direct",
+        "connected": session.Initialized,
+        "userName": session.UserName,
+        "userId": userIDPreview,
+        "feVersion": session.FeVersion,
+        "features": session.Features,
+        "mode": "direct",
         "sessionPool": sessionPoolStatus(),
-        "waf":         WAFStatus(),
+        "waf": WAFStatus(),
     })
 }
-
